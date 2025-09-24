@@ -20,7 +20,7 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
 
-const mongoUri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/codeburry';
+const mongoUri = 'mongodb+srv://database:8vFm0c7DVItarkCv@cluster0.kdfe9pb.mongodb.net/codeburry?retryWrites=true&w=majority&appName=Cluster0';
 const jwtSecret = process.env.JWT_SECRET || 'dev-secret-change-me';
 
 await mongoose.connect(mongoUri);
