@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import Header from './components/Header';
 import Hero from './components/Hero';
 import LearningHub from './components/LearningHub';
-import Garden from './components/Garden';
+import Garden from './pages/Garden';
+import GardenClassic from './pages/GardenClassic';
 import Leaderboard from './pages/Leaderboard';
 import Community from './pages/Community';
 import Dashboard from './components/Dashboard';
@@ -215,12 +216,7 @@ function App() {
         );
       case 'garden':
         return isAuthenticated ? (
-          <Garden 
-            trees={mockTrees}
-            waterDrops={275}
-            onWaterTree={handleWaterTree}
-            onPlantNewTree={handlePlantNewTree}
-          />
+          <GardenClassic />
         ) : (
           <Auth 
             onBack={() => setCurrentPage('home')}

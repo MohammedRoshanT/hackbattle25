@@ -28,7 +28,7 @@ const Garden = () => {
 
   // Add placeholder spots for future trees
   const totalSpots = 12;
-  const emptySpots = totalSpots - stats.totalTrees;
+  const emptySpots = Math.max(0, totalSpots - stats.totalTrees);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 py-8">

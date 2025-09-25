@@ -8,6 +8,33 @@ interface LearningHubProps {
 
 export default function LearningHub({ onStartChallenge }: LearningHubProps) {
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [startedById, setStartedById] = useState<Record<string, boolean>>({});
+  const [completedById, setCompletedById] = useState<Record<string, boolean>>({});
+  const [uploadById, setUploadById] = useState<Record<string, File | null>>({});
+  const [loadingSubs, setLoadingSubs] = useState(false);
+
+  // Load existing submissions to persist UI state
+  React.useEffect(() => {
+    (async () => {
+      try {
+        setLoadingSubs(true);
+        const res = await fetch('/api/me/submissions', { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          const started: Record<string, boolean> = {};
+          const completed: Record<string, boolean> = {};
+          (data.submissions || []).forEach((s: any) => {
+            started[s.challengeId] = true;
+            if (s.status === 'approved') completed[s.challengeId] = true;
+          });
+          setStartedById(started);
+          setCompletedById(completed);
+        }
+      } finally {
+        setLoadingSubs(false);
+      }
+    })();
+  }, []);
 
   const categories = [
     { id: 'all', name: 'All Challenges', icon: Brain },
@@ -133,7 +160,7 @@ export default function LearningHub({ onStartChallenge }: LearningHubProps) {
             <div
               key={challenge.id}
               className={`bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 ${
-                challenge.completed ? 'ring-2 ring-green-200' : ''
+                (completedById[challenge.id] || challenge.completed) ? 'ring-2 ring-green-200' : ''
               }`}
             >
               <div className="p-6">
@@ -143,7 +170,7 @@ export default function LearningHub({ onStartChallenge }: LearningHubProps) {
                     <h3 className="text-xl font-bold text-gray-900 mb-2">{challenge.title}</h3>
                     <p className="text-gray-600 text-sm leading-relaxed">{challenge.description}</p>
                   </div>
-                  {challenge.completed && (
+                  {(completedById[challenge.id] || challenge.completed) && (
                     <div className="ml-4">
                       <Trophy className="h-6 w-6 text-green-600" />
                     </div>
@@ -170,18 +197,65 @@ export default function LearningHub({ onStartChallenge }: LearningHubProps) {
                   </div>
                   
                   <button
-                    onClick={() => onStartChallenge(challenge)}
-                    disabled={challenge.completed}
+                    onClick={() => {
+                      setStartedById(prev => ({ ...prev, [challenge.id]: true }));
+                      onStartChallenge(challenge);
+                    }}
+                    disabled={completedById[challenge.id] || challenge.completed}
                     className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all ${
-                      challenge.completed
+                      (completedById[challenge.id] || challenge.completed)
                         ? 'bg-green-100 text-green-600 cursor-not-allowed'
-                        : 'bg-green-600 hover:bg-green-700 text-white shadow-md hover:shadow-lg'
+                        : startedById[challenge.id]
+                          ? 'bg-yellow-100 text-yellow-700 cursor-default'
+                          : 'bg-green-600 hover:bg-green-700 text-white shadow-md hover:shadow-lg'
                     }`}
                   >
-                    <span>{challenge.completed ? 'Completed' : 'Start Challenge'}</span>
-                    {!challenge.completed && <ChevronRight className="h-4 w-4" />}
+                    <span>{(completedById[challenge.id] || challenge.completed) ? 'Completed' : startedById[challenge.id] ? 'Started' : 'Start Challenge'}</span>
+                    {!(completedById[challenge.id] || challenge.completed) && !startedById[challenge.id] && <ChevronRight className="h-4 w-4" />}
                   </button>
                 </div>
+
+                {/* Upload panel once started and not yet completed */}
+                {startedById[challenge.id] && !(completedById[challenge.id] || challenge.completed) && (
+                  <div className="mt-4 border-t border-gray-100 pt-4">
+                    <div className="text-sm text-gray-700 mb-2">Upload your task files when completed:</div>
+                    <input
+                      type="file"
+                      onChange={(e) => {
+                        const file = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+                        setUploadById(prev => ({ ...prev, [challenge.id]: file }));
+                      }}
+                      className="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
+                    />
+                    <div className="flex justify-end mt-3">
+                      <button
+                        onClick={async () => {
+                          const file = uploadById[challenge.id];
+                          if (!file) return;
+                          const form = new FormData();
+                          form.append('file', file);
+                          form.append('challengeTitle', challenge.title);
+                          const res = await fetch(`/api/challenges/${challenge.id}/upload`, {
+                            method: 'POST',
+                            credentials: 'include',
+                            body: form
+                          });
+                          if (res.ok) {
+                            // Mark as submitted (not completed yet). Admin approval will award drops.
+                            setStartedById(prev => ({ ...prev, [challenge.id]: true }));
+                            // Optionally re-fetch submissions to check status
+                          } else {
+                            alert('Failed to submit task');
+                          }
+                        }}
+                        disabled={!uploadById[challenge.id]}
+                        className={`px-4 py-2 rounded-lg font-medium ${uploadById[challenge.id] ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
+                      >
+                        Upload Task
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           ))}

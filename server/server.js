@@ -1,4 +1,6 @@
 import express from 'express';
+import path from 'path';
+import fs from 'fs';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
@@ -19,6 +21,10 @@ app.set('io', io);
 app.use(express.json());
 app.use(cookieParser());
 app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
+// Serve uploaded files
+const uploadsDir = path.resolve('./uploads');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
+app.use('/uploads', express.static(uploadsDir));
 
 const mongoUri = 'mongodb+srv://database:8vFm0c7DVItarkCv@cluster0.kdfe9pb.mongodb.net/codeburry?retryWrites=true&w=majority&appName=Cluster0';
 const jwtSecret = process.env.JWT_SECRET || 'dev-secret-change-me';
@@ -54,6 +60,20 @@ const leaderboardStatSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 const LeaderboardStat = mongoose.model('LeaderboardStat', leaderboardStatSchema);
+
+// Task submission schema for admin verification
+const taskSubmissionSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  userName: { type: String, required: true },
+  challengeId: { type: String, required: true },
+  challengeTitle: { type: String },
+  filename: { type: String },
+  fileUrl: { type: String },
+  status: { type: String, enum: ['submitted', 'approved', 'rejected'], default: 'submitted', index: true },
+  dropsAwarded: { type: Number, default: 0 },
+}, { timestamps: true });
+
+const TaskSubmission = mongoose.model('TaskSubmission', taskSubmissionSchema);
 
 
 app.post('/api/auth/register', async (req, res) => {
@@ -234,6 +254,120 @@ async function ensureDemoLeaderboardData() {
 }
 
 ensureDemoLeaderboardData().catch(() => {});
+
+// User submits a task for a challenge (metadata only)
+app.post('/api/challenges/:id/submit', authRequired, async (req, res) => {
+  try {
+    const challengeId = req.params.id;
+    const { filename, challengeTitle } = req.body || {};
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    const submission = await TaskSubmission.create({
+      userId: user._id,
+      userName: user.name,
+      challengeId,
+      challengeTitle: challengeTitle || '',
+      filename: filename || '',
+      status: 'submitted',
+    });
+    res.status(201).json({ submission });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: 'Failed to submit task' });
+  }
+});
+
+// Multipart upload endpoint storing the file and creating a submission
+import multer from 'multer';
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadsDir);
+  },
+  filename: function (req, file, cb) {
+    const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const sanitized = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    cb(null, unique + '-' + sanitized);
+  }
+});
+const upload = multer({ storage });
+
+app.post('/api/challenges/:id/upload', authRequired, upload.single('file'), async (req, res) => {
+  try {
+    const challengeId = req.params.id;
+    const { challengeTitle } = req.body || {};
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+    const fileUrl = `/uploads/${req.file.filename}`;
+    const submission = await TaskSubmission.create({
+      userId: user._id,
+      userName: user.name,
+      challengeId,
+      challengeTitle: challengeTitle || '',
+      filename: req.file.originalname,
+      fileUrl,
+      status: 'submitted',
+    });
+    res.status(201).json({ submission });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: 'Failed to upload task' });
+  }
+});
+
+// Current user's submissions
+app.get('/api/me/submissions', authRequired, async (req, res) => {
+  try {
+    const list = await TaskSubmission.find({ userId: req.user.id }).sort({ createdAt: -1 }).lean();
+    res.json({ submissions: list });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: 'Failed to load submissions' });
+  }
+});
+
+// Admin: list submissions by status
+app.get('/api/admin/submissions', authRequired, requireRole('admin'), async (req, res) => {
+  try {
+    const status = req.query.status || 'submitted';
+    const submissions = await TaskSubmission.find({ status }).sort({ createdAt: -1 }).limit(200).lean();
+    res.json({ submissions });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: 'Failed to load submissions' });
+  }
+});
+
+// Admin: verify or reject a submission, and optionally award drops
+app.post('/api/admin/submissions/:id/verify', authRequired, requireRole('admin'), async (req, res) => {
+  try {
+    const { approve, dropsAward = 0 } = req.body || {};
+    const submission = await TaskSubmission.findById(req.params.id);
+    if (!submission) return res.status(404).json({ message: 'Submission not found' });
+
+    if (approve) {
+      submission.status = 'approved';
+      submission.dropsAwarded = Number(dropsAward) || 0;
+      await submission.save();
+
+      // Award drops to leaderboard stats
+      await LeaderboardStat.findOneAndUpdate(
+        { userId: submission.userId },
+        { $inc: { drops: submission.dropsAwarded }, $set: { name: submission.userName } },
+        { upsert: true }
+      );
+
+      return res.json({ submission });
+    } else {
+      submission.status = 'rejected';
+      await submission.save();
+      return res.json({ submission });
+    }
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: 'Failed to verify submission' });
+  }
+});
 
 const port = process.env.PORT || 4000;
 server.listen(port, () => console.log(`API listening on http://localhost:${port}`));

@@ -40,6 +40,22 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     rank: 1
   });
 
+  const reloadFromServer = async () => {
+    if (!isAuthenticated) return;
+    try {
+      const res = await fetch('/api/me/leaderboard', { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setStats((prev) => ({
+          ...prev,
+          waterDrops: data.stats?.drops ?? prev.waterDrops,
+          completedLessons: data.stats?.lessonsCompleted ?? prev.completedLessons,
+          currentStreak: data.stats?.streak ?? prev.currentStreak,
+        }));
+      }
+    } catch {}
+  };
+
   useEffect(() => {
     if (isAuthenticated) {
       (async () => {
@@ -57,6 +73,17 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch {}
       })();
     }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const onFocus = () => { reloadFromServer(); };
+    window.addEventListener('focus', onFocus);
+    const id = window.setInterval(reloadFromServer, 15000);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      window.clearInterval(id);
+    };
   }, [isAuthenticated]);
 
   const saveStats = (newStats: UserStats) => {
