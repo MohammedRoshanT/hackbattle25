@@ -1,4 +1,4 @@
-HackBattle25 App
+CodeBurry
 ================
 
 A full-stack React + Vite + Express + MongoDB app with gamified learning:
