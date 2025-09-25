@@ -14,6 +14,7 @@ export default function LearningHub({ onStartChallenge }: LearningHubProps) {
   const [loadingSubs, setLoadingSubs] = useState(false);
   const [uploadingById, setUploadingById] = useState<Record<string, boolean>>({});
   const [errorById, setErrorById] = useState<Record<string, string | null>>({});
+  const [flash, setFlash] = useState<string | null>(null);
 
   // Load existing submissions to persist UI state
   React.useEffect(() => {
@@ -156,6 +157,17 @@ export default function LearningHub({ onStartChallenge }: LearningHubProps) {
           })}
         </div>
 
+        {/* Flash message */}
+        {flash && (
+          <div
+            className="mx-auto mb-4 max-w-3xl rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-green-800"
+            role="status"
+            aria-live="polite"
+          >
+            {flash}
+          </div>
+        )}
+
         {/* Challenges Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {filteredChallenges.map((challenge) => (
@@ -248,6 +260,8 @@ export default function LearningHub({ onStartChallenge }: LearningHubProps) {
                             // Mark as submitted (not completed yet). Admin approval will award drops.
                             setStartedById(prev => ({ ...prev, [challenge.id]: true }));
                             // Optionally re-fetch submissions to check status
+                            setFlash('✅ Task uploaded');
+                            window.setTimeout(() => setFlash(null), 2000);
                           } else {
                             let msg = 'Failed to submit task';
                             try { const j = await res.json(); if (j?.message) msg = j.message; } catch {}

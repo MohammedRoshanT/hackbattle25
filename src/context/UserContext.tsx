@@ -17,6 +17,7 @@ interface UserContextType {
   completeLesson: () => void;
   waterPlant: (amount: number) => boolean;
   plantTree: () => void;
+  refreshStats: () => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -161,7 +162,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       spendWaterDrops,
       completeLesson,
       waterPlant,
-      plantTree
+      plantTree,
+      refreshStats: reloadFromServer
     }}>
       {children}
     </UserContext.Provider>
