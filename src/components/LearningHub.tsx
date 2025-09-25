@@ -12,6 +12,8 @@ export default function LearningHub({ onStartChallenge }: LearningHubProps) {
   const [completedById, setCompletedById] = useState<Record<string, boolean>>({});
   const [uploadById, setUploadById] = useState<Record<string, File | null>>({});
   const [loadingSubs, setLoadingSubs] = useState(false);
+  const [uploadingById, setUploadingById] = useState<Record<string, boolean>>({});
+  const [errorById, setErrorById] = useState<Record<string, string | null>>({});
 
   // Load existing submissions to persist UI state
   React.useEffect(() => {
@@ -232,6 +234,8 @@ export default function LearningHub({ onStartChallenge }: LearningHubProps) {
                         onClick={async () => {
                           const file = uploadById[challenge.id];
                           if (!file) return;
+                          setErrorById(prev => ({ ...prev, [challenge.id]: null }));
+                          setUploadingById(prev => ({ ...prev, [challenge.id]: true }));
                           const form = new FormData();
                           form.append('file', file);
                           form.append('challengeTitle', challenge.title);
@@ -245,14 +249,20 @@ export default function LearningHub({ onStartChallenge }: LearningHubProps) {
                             setStartedById(prev => ({ ...prev, [challenge.id]: true }));
                             // Optionally re-fetch submissions to check status
                           } else {
-                            alert('Failed to submit task');
+                            let msg = 'Failed to submit task';
+                            try { const j = await res.json(); if (j?.message) msg = j.message; } catch {}
+                            setErrorById(prev => ({ ...prev, [challenge.id]: msg }));
                           }
+                          setUploadingById(prev => ({ ...prev, [challenge.id]: false }));
                         }}
-                        disabled={!uploadById[challenge.id]}
-                        className={`px-4 py-2 rounded-lg font-medium ${uploadById[challenge.id] ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
+                        disabled={!uploadById[challenge.id] || uploadingById[challenge.id]}
+                        className={`px-4 py-2 rounded-lg font-medium ${uploadById[challenge.id] && !uploadingById[challenge.id] ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
                       >
-                        Upload Task
+                        {uploadingById[challenge.id] ? 'Uploading…' : 'Upload Task'}
                       </button>
+                      {errorById[challenge.id] && (
+                        <div className="ml-3 text-sm text-red-600">{errorById[challenge.id]}</div>
+                      )}
                     </div>
                   </div>
                 )}
