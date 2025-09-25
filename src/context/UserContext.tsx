@@ -42,52 +42,70 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     if (isAuthenticated) {
-      const savedStats = localStorage.getItem('codeburry_stats');
-      if (savedStats) {
-        setStats(JSON.parse(savedStats));
-      } else {
-        // Initialize with some demo data
-        const initialStats = {
-          waterDrops: 15,
-          completedLessons: 3,
-          currentStreak: 2,
-          totalTrees: 1,
-          plantGrowthLevel: 25,
-          rank: 12
-        };
-        setStats(initialStats);
-        localStorage.setItem('codeburry_stats', JSON.stringify(initialStats));
-      }
+      (async () => {
+        try {
+          const res = await fetch('/api/me/leaderboard', { credentials: 'include' });
+          if (res.ok) {
+            const data = await res.json();
+            setStats((prev) => ({
+              ...prev,
+              waterDrops: data.stats?.drops ?? 0,
+              completedLessons: data.stats?.lessonsCompleted ?? 0,
+              currentStreak: data.stats?.streak ?? 0,
+            }));
+          }
+        } catch {}
+      })();
     }
   }, [isAuthenticated]);
 
   const saveStats = (newStats: UserStats) => {
     setStats(newStats);
-    if (isAuthenticated) {
-      localStorage.setItem('codeburry_stats', JSON.stringify(newStats));
-    }
   };
 
-  const addWaterDrops = (amount: number) => {
-    saveStats({ ...stats, waterDrops: stats.waterDrops + amount });
+  const addWaterDrops = async (amount: number) => {
+    const updated = { ...stats, waterDrops: stats.waterDrops + amount };
+    saveStats(updated);
+    if (isAuthenticated) {
+      try {
+        await fetch('/api/me/leaderboard', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ drops: amount })
+        });
+      } catch {}
+    }
   };
 
   const spendWaterDrops = (amount: number): boolean => {
     if (stats.waterDrops >= amount) {
-      saveStats({ ...stats, waterDrops: stats.waterDrops - amount });
+      const updated = { ...stats, waterDrops: stats.waterDrops - amount };
+      saveStats(updated);
+      // Spending does not decrement leaderboard drops; only earning increments
       return true;
     }
     return false;
   };
 
-  const completeLesson = () => {
+  const completeLesson = async () => {
     const newStats = {
       ...stats,
       completedLessons: stats.completedLessons + 1,
       currentStreak: stats.currentStreak + 1
     };
-    addWaterDrops(5); // Reward for completing lesson
     saveStats(newStats);
+    await addWaterDrops(5);
+    if (isAuthenticated) {
+      try {
+        await fetch('/api/me/leaderboard', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ lessons: 1, streakDelta: 1 })
+        });
+      } catch {}
+    }
   };
 
   const waterPlant = (amount: number): boolean => {

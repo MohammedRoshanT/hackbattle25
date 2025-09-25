@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import io from 'socket.io-client';
+import defaultAvatar from '../assets/default-avatar.svg';
 
 const socket = io('http://localhost:4000', { withCredentials: true });
 
@@ -86,7 +87,18 @@ export default function Community() {
         <div className="space-y-4">
           {posts.map(post => (
             <div key={post._id} className="bg-white rounded-lg shadow p-4 flex gap-4 items-start">
-              <img src={post.user.avatar || '/avatar.png'} alt={post.user.name} className="h-10 w-10 rounded-full" />
+              <img
+                src={post.user.avatar || defaultAvatar}
+                alt={post.user.name}
+                className="h-10 w-10 rounded-full"
+                onError={e => {
+                  const target = e.currentTarget as HTMLImageElement;
+                  if (target.src !== window.location.origin + defaultAvatar) {
+                    target.onerror = null;
+                    target.src = defaultAvatar;
+                  }
+                }}
+              />
               <div className="flex-1">
                 <div className="flex items-center gap-2">
                   <span className="font-semibold">{post.user.name}</span>
@@ -105,7 +117,7 @@ export default function Community() {
                   disabled={!isAuthenticated || post.likedBy.includes(user?.id || '')}
                   style={{ outline: 'none' }}
                 >
-                  <span className="inline-block transition-transform duration-200 group-active:scale-125">❤️</span>
+                  <span className="inline-block transition-transform duration-200 group-active:scale-125">❤</span>
                   <span>{post.likes}</span>
                   <span className="ml-1">Like{post.likes !== 1 ? 's' : ''}</span>
                 </button>
@@ -127,7 +139,18 @@ export default function Community() {
                   <div className="mt-3 space-y-2">
                     {post.comments.map((c, i) => (
                       <div key={i} className="flex items-start gap-2 text-sm bg-gray-50 rounded p-2">
-                        <img src={c.user.avatar || '/avatar.png'} alt={c.user.name} className="h-7 w-7 rounded-full" />
+                        <img
+                          src={c.user.avatar || defaultAvatar}
+                          alt={c.user.name}
+                          className="h-7 w-7 rounded-full"
+                          onError={e => {
+                            const target = e.currentTarget as HTMLImageElement;
+                            if (target.src !== window.location.origin + defaultAvatar) {
+                              target.onerror = null;
+                              target.src = defaultAvatar;
+                            }
+                          }}
+                        />
                         <div>
                           <span className="font-semibold">{c.user.name}</span>{' '}
                           <span className="text-gray-400">{new Date(c.createdAt).toLocaleString()}</span>

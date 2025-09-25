@@ -43,6 +43,18 @@ function signToken(payload) {
   return jwt.sign(payload, jwtSecret, { expiresIn: '7d' });
 }
 
+// Leaderboard stats schema (stores aggregated stats per user)
+const leaderboardStatSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  name: { type: String, required: true },
+  avatar: { type: String },
+  drops: { type: Number, default: 0 },
+  lessonsCompleted: { type: Number, default: 0 },
+  streak: { type: Number, default: 0 },
+}, { timestamps: true });
+
+const LeaderboardStat = mongoose.model('LeaderboardStat', leaderboardStatSchema);
+
 
 app.post('/api/auth/register', async (req, res) => {
   try {
@@ -110,6 +122,118 @@ app.get('/api/admin/ping', authRequired, requireRole('admin'), (req, res) => {
 
 // Community routes (real-time)
 app.use('/api/community', communityRoutes);
+
+// Leaderboard routes
+// GET /api/leaderboard?by=drops|lessons|streak&limit=50
+app.get('/api/leaderboard', async (req, res) => {
+  try {
+    const by = (req.query.by || 'drops');
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+    const sortField = by === 'lessons' ? 'lessonsCompleted' : by === 'streak' ? 'streak' : 'drops';
+
+    const stats = await LeaderboardStat.find()
+      .sort({ [sortField]: -1, updatedAt: -1 })
+      .limit(limit)
+      .lean();
+
+    const entries = stats.map((s, index) => ({
+      user: {
+        id: s.userId?.toString?.() || String(s.userId),
+        name: s.name,
+        avatar: s.avatar || null,
+      },
+      drops: s.drops || 0,
+      lessons: s.lessonsCompleted || 0,
+      streak: s.streak || 0,
+      rank: index + 1,
+    }));
+
+    res.json({ entries });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: 'Failed to load leaderboard' });
+  }
+});
+
+// Get current user's leaderboard stats
+app.get('/api/me/leaderboard', authRequired, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    let stat = await LeaderboardStat.findOne({ userId: user._id });
+    if (!stat) {
+      stat = await LeaderboardStat.create({ userId: user._id, name: user.name });
+    }
+    res.json({
+      user: user.toSafeJSON(),
+      stats: {
+        drops: stat.drops || 0,
+        lessonsCompleted: stat.lessonsCompleted || 0,
+        streak: stat.streak || 0,
+      }
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: 'Failed to load user stats' });
+  }
+});
+
+// Increment current user's leaderboard stats
+app.post('/api/me/leaderboard', authRequired, async (req, res) => {
+  try {
+    const { drops = 0, lessons = 0, streakDelta = 0 } = req.body || {};
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    const update = {
+      $inc: {
+        drops: Number(drops) || 0,
+        lessonsCompleted: Number(lessons) || 0,
+        streak: Number(streakDelta) || 0,
+      },
+      $set: { name: user.name },
+    };
+    const stat = await LeaderboardStat.findOneAndUpdate(
+      { userId: user._id },
+      update,
+      { new: true, upsert: true }
+    ).lean();
+    res.json({
+      stats: {
+        drops: stat.drops || 0,
+        lessonsCompleted: stat.lessonsCompleted || 0,
+        streak: stat.streak || 0,
+      }
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: 'Failed to update stats' });
+  }
+});
+
+// OPTIONAL: seed a demo record for quick testing if collection is empty
+async function ensureDemoLeaderboardData() {
+  const count = await LeaderboardStat.countDocuments();
+  if (count > 0) return;
+  const demoUsers = [
+    { name: 'Alex Chen', drops: 847, lessonsCompleted: 89, streak: 45 },
+    { name: 'Sarah Johnson', drops: 623, lessonsCompleted: 76, streak: 32 },
+    { name: 'Mike Rodriguez', drops: 589, lessonsCompleted: 64, streak: 28 },
+    { name: 'Emma Wilson', drops: 456, lessonsCompleted: 52, streak: 21 },
+    { name: 'David Kim', drops: 423, lessonsCompleted: 47, streak: 19 },
+  ];
+  const existingUser = await User.findOne();
+  for (const du of demoUsers) {
+    await LeaderboardStat.create({
+      userId: existingUser?._id || new mongoose.Types.ObjectId(),
+      name: du.name,
+      drops: du.drops,
+      lessonsCompleted: du.lessonsCompleted,
+      streak: du.streak,
+    });
+  }
+}
+
+ensureDemoLeaderboardData().catch(() => {});
 
 const port = process.env.PORT || 4000;
 server.listen(port, () => console.log(`API listening on http://localhost:${port}`));

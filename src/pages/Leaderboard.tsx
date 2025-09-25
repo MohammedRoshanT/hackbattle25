@@ -1,41 +1,50 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { TrophyIcon, FireIcon, AcademicCapIcon } from '@heroicons/react/24/outline';
-import { useUser } from '../context/UserContext';
 
 const Leaderboard = () => {
-  const { stats } = useUser();
   const [activeTab, setActiveTab] = useState<'drops' | 'lessons' | 'streak'>('drops');
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [entries, setEntries] = useState<Array<{ id: string; name: string; avatar?: string | null; score: number; rank: number }>>([]);
 
-  // Mock leaderboard data
-  const leaderboardData = {
-    drops: [
-      { id: 1, name: 'Alex Chen', avatar: 'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&fit=crop', score: 847, rank: 1 },
-      { id: 2, name: 'Sarah Johnson', avatar: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&fit=crop', score: 623, rank: 2 },
-      { id: 3, name: 'Mike Rodriguez', avatar: 'https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&fit=crop', score: 589, rank: 3 },
-      { id: 4, name: 'Emma Wilson', avatar: 'https://images.pexels.com/photos/1130626/pexels-photo-1130626.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&fit=crop', score: 456, rank: 4 },
-      { id: 5, name: 'David Kim', avatar: 'https://images.pexels.com/photos/1040880/pexels-photo-1040880.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&fit=crop', score: 423, rank: 5 },
-      { id: 6, name: 'Lisa Zhang', avatar: 'https://images.pexels.com/photos/1065084/pexels-photo-1065084.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&fit=crop', score: 389, rank: 6 },
-      { id: 7, name: 'James Brown', avatar: 'https://images.pexels.com/photos/1181686/pexels-photo-1181686.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&fit=crop', score: 345, rank: 7 },
-      { id: 8, name: 'Anna Petrov', avatar: 'https://images.pexels.com/photos/1181424/pexels-photo-1181424.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&fit=crop', score: 312, rank: 8 },
-      { id: 9, name: 'Tom Anderson', avatar: 'https://images.pexels.com/photos/1043471/pexels-photo-1043471.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&fit=crop', score: 289, rank: 9 },
-      { id: 10, name: 'Maria Garcia', avatar: 'https://images.pexels.com/photos/1036623/pexels-photo-1036623.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&fit=crop', score: 267, rank: 10 },
-      { id: 11, name: 'John Smith', avatar: 'https://images.pexels.com/photos/1674752/pexels-photo-1674752.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&fit=crop', score: 234, rank: 11 },
-      { id: 12, name: 'Demo User', avatar: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&fit=crop', score: stats.waterDrops, rank: stats.rank }
-    ],
-    lessons: [
-      { id: 1, name: 'Alex Chen', avatar: 'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&fit=crop', score: 89, rank: 1 },
-      { id: 2, name: 'Sarah Johnson', avatar: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&fit=crop', score: 76, rank: 2 },
-      { id: 3, name: 'Mike Rodriguez', avatar: 'https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&fit=crop', score: 64, rank: 3 },
-      { id: 12, name: 'Demo User', avatar: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&fit=crop', score: stats.completedLessons, rank: 15 }
-    ],
-    streak: [
-      { id: 1, name: 'Alex Chen', avatar: 'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&fit=crop', score: 45, rank: 1 },
-      { id: 2, name: 'Sarah Johnson', avatar: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&fit=crop', score: 32, rank: 2 },
-      { id: 3, name: 'Mike Rodriguez', avatar: 'https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&fit=crop', score: 28, rank: 3 },
-      { id: 12, name: 'Demo User', avatar: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&fit=crop', score: stats.currentStreak, rank: 8 }
-    ]
-  };
+  const byParam = useMemo(() => {
+    if (activeTab === 'lessons') return 'lessons';
+    if (activeTab === 'streak') return 'streak';
+    return 'drops';
+  }, [activeTab]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        setLoading(true);
+        setError(null);
+        const res = await fetch(`http://localhost:4000/api/leaderboard?by=${byParam}&limit=50`, {
+          credentials: 'include',
+        });
+        if (!res.ok) throw new Error('Failed to load leaderboard');
+        const data = await res.json();
+        if (cancelled) return;
+        const mapped = (data.entries || []).map((e: any) => ({
+          id: e.user?.id || e.userId || String(Math.random()),
+          name: e.user?.name || 'Unknown',
+          avatar: e.user?.avatar || null,
+          score: activeTab === 'lessons' ? e.lessons : activeTab === 'streak' ? e.streak : e.drops,
+          rank: e.rank,
+        }));
+        setEntries(mapped);
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message || 'Something went wrong');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [byParam, activeTab]);
 
   const tabs = [
     { key: 'drops', label: 'Water Drops', icon: '💧', color: 'blue' },
@@ -69,7 +78,7 @@ const Leaderboard = () => {
     }
   };
 
-  const currentData = leaderboardData[activeTab];
+  const currentData = entries;
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -133,11 +142,18 @@ const Leaderboard = () => {
           </div>
 
           <div className="divide-y divide-gray-200">
-            {currentData
+            {loading && (
+              <div className="p-6 text-center text-gray-500">Loading...</div>
+            )}
+            {error && !loading && (
+              <div className="p-6 text-center text-red-600">{error}</div>
+            )}
+            {!loading && !error && currentData
+              .slice()
               .sort((a, b) => b.score - a.score)
               .map((user, index) => {
                 const actualRank = index + 1;
-                const isCurrentUser = user.name === 'Demo User';
+                const isCurrentUser = false;
                 
                 return (
                   <motion.div

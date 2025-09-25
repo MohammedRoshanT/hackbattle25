@@ -3,7 +3,7 @@ import Header from './components/Header';
 import Hero from './components/Hero';
 import LearningHub from './components/LearningHub';
 import Garden from './components/Garden';
-import Leaderboard from './components/Leaderboard';
+import Leaderboard from './pages/Leaderboard';
 import Community from './pages/Community';
 import Dashboard from './components/Dashboard';
 import About from './components/About';
@@ -228,10 +228,7 @@ function App() {
         );
       case 'leaderboard':
         return (
-          <Leaderboard 
-            entries={mockLeaderboard}
-            currentUserId={authUser?.id}
-          />
+          <Leaderboard />
         );
       case 'community':
         return <Community />;
